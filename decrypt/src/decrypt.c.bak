@@ -1,0 +1,442 @@
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <math.h>
+
+#define MAX_BUFFER_LEN 1024*1024
+
+#define CUT_BIT_LEN 0
+#define CUT_BIT_LEN_64 0
+#define CUT_BIT_LEN_32 0
+#define CUT_BIT_LEN_16 0
+
+
+#define NOT_CUT_BIT_LEN 1
+
+#define KEY_BIT_LEN_1 6
+#define KEY_BIT_LEN_3 3
+
+#if CUT_BIT_LEN_64
+#define KEY_BIT_LEN_4 6
+#elif CUT_BIT_LEN_32
+#define KEY_BIT_LEN_4 5
+#elif CUT_BIT_LEN_16
+#define KEY_BIT_LEN_4 4
+#elif NOT_CUT_BIT_LEN
+#define KEY_BIT_LEN_4 8
+#endif
+
+#define KEY_MAX_BYTE_LEN 32
+
+typedef struct
+{
+	uint8_t* start;
+	uint8_t* p;
+	uint8_t* end;
+	int bits_left;
+} bs_t;
+
+static inline int bs_eof(bs_t* b) { if (b->p >= b->end) { return 1; } else { return 0; } }
+
+static inline bs_t* bs_init(bs_t* b, uint8_t* buf, size_t size)
+{
+    b->start = buf;
+    b->p = buf;
+    b->end = buf + size;
+    b->bits_left = 8;
+    return b;
+}
+
+static inline bs_t* bs_new(uint8_t* buf, size_t size)
+{
+    bs_t* b = (bs_t*)malloc(sizeof(bs_t));
+    bs_init(b, buf, size);
+    return b;
+}
+
+
+static inline void bs_skip_u1(bs_t* b)
+{    
+    b->bits_left--;
+    if (b->bits_left == 0) { b->p ++; b->bits_left = 8; }
+}
+
+static inline void bs_skip_u(bs_t* b, int n)
+{
+    int i;
+    for ( i = 0; i < n; i++ ) 
+    {
+        bs_skip_u1( b );
+    }
+}
+
+static inline void bs_free(bs_t* b)
+{
+    free(b);
+}
+
+static inline uint32_t bs_read_u1(bs_t* b)
+{
+    uint32_t r = 0;
+    
+    b->bits_left--;
+
+    if (! bs_eof(b))
+    {
+        r = ((*(b->p)) >> b->bits_left) & 0x01;
+    }
+
+    if (b->bits_left == 0) { b->p ++; b->bits_left = 8; }
+
+    return r;
+}
+/*读buffer的前n位，结果以十进制u32 return*/
+static inline uint32_t bs_read_u(bs_t* b, int n)
+{
+    uint32_t r = 0;
+    int i;
+    for (i = 0; i < n; i++)
+    {
+        r |= ( bs_read_u1(b) << ( n - i - 1 ) );
+    }
+    return r;
+}
+
+/*对指针b指向的字节buffer写入v*/
+static inline void bs_write_u1(bs_t* b, uint32_t v)
+{
+    b->bits_left--;
+
+    if (! bs_eof(b))
+    {
+        /* FIXME this is slow, but we must clear bit first
+         is it better to memset(0) the whole buffer during bs_init() instead? 
+         if we don't do either, we introduce pretty nasty bugs*/
+        (*(b->p)) &= ~(0x01 << b->bits_left);
+        (*(b->p)) |= ((v & 0x01) << b->bits_left);
+    }
+
+    if (b->bits_left == 0) { b->p ++; b->bits_left = 8; }
+}
+
+/*对指针b指向的字节buffer的前nbit位写入v*/
+static inline void bs_write_u(bs_t* b, int n, uint32_t v)
+{
+    int i;
+    for (i = 0; i < n; i++)
+    {
+        bs_write_u1(b, (v >> ( n - i - 1 ))&0x01 );
+    }
+}
+
+/*Number需要多少个bit位容纳*/
+int GetNeedBitCount(unsigned int Number,int *BitCount )
+{
+	int i32Count=0;
+	
+	if(Number<0)
+	{
+		return -1;
+	}
+
+	if(Number==0)
+	{
+		i32Count=1;
+	}
+	while(Number!=0)
+	{
+		i32Count++;
+		Number/=2;
+	}
+    *BitCount=i32Count;
+	return 0;
+}
+
+int GetKeyByteLen(int ByteOffset,int ByteOffsetBitNum,int BitOffset,int BitLength,int *KeyByteLen)
+{
+	int KeyBitLength;
+	int KeyByteLength;
+	
+	KeyBitLength=KEY_BIT_LEN_1+ByteOffsetBitNum+KEY_BIT_LEN_3+KEY_BIT_LEN_4+BitLength;
+	KeyByteLength=KeyBitLength/8;
+
+	if(KeyBitLength%8!=0)
+	{
+		KeyByteLength+=1;
+	}
+	
+	*KeyByteLen=KeyByteLength;
+
+	return 0;
+}
+
+int bs_Write_KeyData(bs_t *b, int BitLength,uint8_t *s_Keydata)
+{
+	int Keydata_Byte_Len=BitLength/8;
+	int Keydata_RemainBit_Len=BitLength%8;
+	int i=0;
+
+	if(Keydata_RemainBit_Len!=0)
+	{
+		Keydata_Byte_Len++;
+	}
+	
+	for(i=0;i<Keydata_Byte_Len;i++)
+	{
+		
+		if(i==Keydata_Byte_Len-1&&Keydata_RemainBit_Len!=0)
+		{
+			bs_write_u(b,Keydata_RemainBit_Len,s_Keydata[i]);	
+		}
+		else
+		{
+			bs_write_u(b,8,s_Keydata[i]);		
+		}
+
+	}
+
+	return 0;
+}
+
+int bs_Read_KeyData(bs_t *b, int BitLength,uint8_t *s_Keydata)
+{
+	int Keydata_Byte_Len=BitLength/8;
+	int Keydata_RemainBit_Len=BitLength%8;
+	int i=0;
+	memset(s_Keydata,0,32);
+	
+	if(Keydata_RemainBit_Len!=0)
+	{
+		Keydata_Byte_Len++;
+	}
+
+	for(i=0;i<Keydata_Byte_Len;i++)
+	{
+		if(i==Keydata_Byte_Len-1 && Keydata_RemainBit_Len!=0)
+		{
+			s_Keydata[i]=bs_read_u(b,Keydata_RemainBit_Len);
+		}
+		else
+		{
+			s_Keydata[i]=bs_read_u(b,8);
+		}
+	}
+	
+	return 0;
+}
+
+int Generate_Key_Get_Changed_ByteNum(int BitLength,int BitOffset,int *ChangedByteNum)
+{
+	int ByteCount=0;
+
+	ByteCount=(BitOffset+BitLength)/8;
+	
+	if((BitOffset+BitLength)%8!=0)
+	{
+		ByteCount+=1;
+	}
+
+	*ChangedByteNum=ByteCount;
+	return 0;
+}
+
+int Decrypt_write264File(int h264fd,int LastByteOffset,int ByteOffset,int BitOffset,int BitLength,uint8_t* s_Keydata)
+{
+	static char *h264Buffer=NULL;
+	static bs_t *b;
+	static int BufferStart=0;
+    int RelativeByteOff=ByteOffset-LastByteOffset;
+	static int RelativeByteOff_Sum=0;
+	static int LastBitoffset=0;
+	static int LastBitLen=0;	
+	static int read_count=0;
+	int ChangedByteNum;
+
+	Generate_Key_Get_Changed_ByteNum(BitLength,BitOffset,&ChangedByteNum);
+	
+	if(BitLength==0)
+	{
+		lseek(h264fd,BufferStart,SEEK_SET);
+		write(h264fd,h264Buffer,read_count);
+
+		free(h264Buffer);
+		bs_free(b);
+
+		return 0;
+	}
+	
+	if(LastByteOffset==0)
+	{
+		h264Buffer=(char *)malloc(MAX_BUFFER_LEN*sizeof(char));	
+		memset(h264Buffer,0x00,MAX_BUFFER_LEN);
+		BufferStart=lseek(h264fd,ByteOffset,SEEK_SET); 
+		read_count=read(h264fd,h264Buffer,MAX_BUFFER_LEN);
+
+		b=bs_new(h264Buffer,MAX_BUFFER_LEN);		
+	}	
+	else if(LastByteOffset>0)
+	{
+		
+		RelativeByteOff_Sum+=RelativeByteOff;
+		LastByteOffset=ByteOffset;
+
+		if(RelativeByteOff_Sum+ChangedByteNum<MAX_BUFFER_LEN)
+		{	
+			if(RelativeByteOff*8-LastBitoffset-LastBitLen>=0)
+			{	
+				bs_skip_u(b,RelativeByteOff*8-LastBitoffset-LastBitLen);
+			}	
+		}		
+		else
+		{
+			lseek(h264fd,BufferStart,SEEK_SET);
+			write(h264fd,h264Buffer,read_count);
+
+			lseek(h264fd,ByteOffset,SEEK_SET);
+			BufferStart=ByteOffset;
+			read_count=read(h264fd,h264Buffer,MAX_BUFFER_LEN);
+			b=bs_new(h264Buffer,MAX_BUFFER_LEN);
+			RelativeByteOff_Sum=0;
+			RelativeByteOff=0;
+			LastBitoffset=0;
+			LastBitLen=0;
+		}
+	}
+
+	if(RelativeByteOff*8-LastBitoffset-LastBitLen>=0)
+	{
+		bs_skip_u(b,BitOffset);
+	}
+	else
+	{
+	    bs_skip_u(b,BitOffset-(LastBitoffset+LastBitLen)%8);
+	}
+	
+	bs_Write_KeyData(b,BitLength,s_Keydata);	
+
+	LastBitoffset=BitLength;
+	LastBitLen=BitOffset;
+}
+
+int Decrypt(int h264fd,FILE* KeyFile )
+{
+	char *KeyBuffer=NULL;
+	KeyBuffer=malloc(MAX_BUFFER_LEN*sizeof(char));
+	
+	bs_t *b;
+	int keyBitLen[5]={KEY_BIT_LEN_1,0,KEY_BIT_LEN_3,KEY_BIT_LEN_4,0};
+	
+	int RelativeByteOff,BitOffset,BitLength;
+	uint8_t s_Keydata[32]={0x00};
+	
+	fseek(KeyFile,0,SEEK_SET);
+	lseek(h264fd,0,SEEK_SET);
+	int sumBitLen=0;
+	int remainBit=0;
+	int LastByteOffset=0;
+	int ByteOffset=0;
+	int ret=-1;
+	int KeyFd=fileno(KeyFile);
+	int KeyByteLen=0;
+	int Buffer_Remain_Byte=MAX_BUFFER_LEN;
+
+	while((ret=read(KeyFd,KeyBuffer,MAX_BUFFER_LEN))!=0)
+	{		
+		b=bs_new(KeyBuffer,MAX_BUFFER_LEN );		
+		while(!bs_eof(b))
+		{	
+			keyBitLen[1]=bs_read_u(b,keyBitLen[0]);
+
+			if(0 == keyBitLen[1])
+			{
+				Decrypt_write264File(h264fd,LastByteOffset,ByteOffset,BitOffset,0,s_Keydata);
+				return 0;
+			}
+			
+			RelativeByteOff=bs_read_u(b,keyBitLen[1]);
+			LastByteOffset=ByteOffset;
+			ByteOffset+=RelativeByteOff;
+			BitOffset=bs_read_u(b,keyBitLen[2]);
+			BitLength=bs_read_u(b,keyBitLen[3]);
+			bs_Read_KeyData(b,BitLength,s_Keydata);
+	
+			sumBitLen=keyBitLen[0]+keyBitLen[1]+keyBitLen[2]+keyBitLen[3]+BitLength;
+			KeyByteLen=sumBitLen/8;
+
+			if(sumBitLen%8!=0)
+			{
+				//skip remainBit to the begin of Next Byte;
+				remainBit=8-(sumBitLen%8);
+				bs_skip_u(b,remainBit);
+				KeyByteLen++;
+			}
+	
+			Decrypt_write264File(h264fd,LastByteOffset,ByteOffset,BitOffset,BitLength,s_Keydata);			
+			Buffer_Remain_Byte-=KeyByteLen;
+			
+			if(Buffer_Remain_Byte<KEY_MAX_BYTE_LEN)	
+			{
+				ret=lseek(KeyFd,-Buffer_Remain_Byte,SEEK_CUR);	
+				Buffer_Remain_Byte=MAX_BUFFER_LEN;
+				break;
+			}
+									
+		}
+		memset(KeyBuffer,0,MAX_BUFFER_LEN);
+	}
+
+	free(KeyBuffer);
+}
+
+int main(int argc,char **argv)
+{
+	char H264FilePath[255]={0x00};
+	char KeyFilePath[255]={0x00};
+	char DeleteKeyFile[255]="rm ";
+	if(strcmp(argv[1],"-s")==0&&strcmp(argv[3],"-k")==0)
+	{
+		memcpy(H264FilePath,argv[2],strlen(argv[2]));
+		memcpy(KeyFilePath,argv[4],strlen(argv[4]));
+	}
+	else
+	{
+		printf("usage: ./a.out -s [H264FilePath] -k [KeyFilePath] \n");
+		return 0;
+	}
+	
+	H264FilePath[strlen(argv[2])]=0x00;
+	KeyFilePath[strlen(argv[4])]=0x00;
+	
+	int h264fd;
+	FILE *KeyFile;
+	h264fd=open(H264FilePath,O_RDWR);
+	KeyFile=fopen(KeyFilePath,"r");
+	
+	if(h264fd==-1)
+	{
+		printf("open h264fd file error!!\n");
+		exit(-1);
+	}
+
+	if(KeyFile==NULL)
+	{
+		printf("open KeyFile error!!\n");
+		exit(-1);
+	}
+
+	Decrypt(h264fd,KeyFile);	
+	fsync(h264fd);
+	
+	close(h264fd);
+	fclose(KeyFile);
+
+	//strcat(DeleteKeyFile,KeyFilePath);
+	//printf("DeleteKeyFile cmd ==%s\n",DeleteKeyFile);
+
+	//system(DeleteKeyFile);
+	return 1;
+}
+
