@@ -446,7 +446,8 @@ int decode_one_frame(DecoderParams *pDecoder)
     p_Vid->iSliceNumOfCurrPic++;
     current_header = SOS;
   }
-  while(current_header != SOP && current_header !=EOS)
+	
+  while(current_header != SOP && current_header != EOS)
   {
     //no pending slices;
     assert(p_Vid->iSliceNumOfCurrPic < p_Vid->iNumOfSlicesAllocated);
@@ -459,20 +460,16 @@ int decode_one_frame(DecoderParams *pDecoder)
     //p_Vid->currentSlice = currSlice;
     currSlice->p_Vid = p_Vid;
     currSlice->p_Inp = p_Inp;
-    //currSlice->p_Dpb = p_Vid->p_Dpb_layer[0]; //set default value;
     currSlice->next_header = -8888;
     currSlice->num_dec_mb = 0;
     currSlice->coeff_ctr = -1;
     currSlice->pos       =  0;
-    //currSlice->is_reset_coeff = FALSE;
-    //currSlice->is_reset_coeff_cr = FALSE;
 
-    current_header = read_new_slice(currSlice);
+    current_header = read_new_slice(currSlice);	//currSlice->p_Vid->nalu
+    
     //init;
     currSlice->current_header = current_header;
 
-    // error tracking of primary and redundant slices.
-    //Error_tracking(p_Vid, currSlice);
     // If primary and redundant are received and primary is correct, discard the redundant
     // else, primary slice will be replaced with redundant slice.
     if(currSlice->frame_num == p_Vid->previous_frame_num && currSlice->redundant_pic_cnt !=0
@@ -481,7 +478,7 @@ int decode_one_frame(DecoderParams *pDecoder)
       continue;
     }
 
-    if((current_header != SOP && current_header !=EOS) || (p_Vid->iSliceNumOfCurrPic==0 && current_header == SOP))
+    if((current_header != SOP && current_header != EOS) || (p_Vid->iSliceNumOfCurrPic == 0 && current_header == SOP))
     {
        currSlice->current_slice_nr = (short) p_Vid->iSliceNumOfCurrPic;
        p_Vid->dec_picture->max_slice_id = (short) imax(currSlice->current_slice_nr, p_Vid->dec_picture->max_slice_id);
@@ -510,8 +507,6 @@ int decode_one_frame(DecoderParams *pDecoder)
          }
          p_Vid->iNumOfSlicesAllocated += MAX_NUM_DECSLICES;
        }
-
-			 p_Dec->nalu_pos_array_idx--;
        current_header = SOS;       
     }
     else
@@ -528,13 +523,27 @@ int decode_one_frame(DecoderParams *pDecoder)
        //keep it in currentslice;
        ppSliceList[p_Vid->iSliceNumOfCurrPic] = p_Vid->pNextSlice;
        p_Vid->pNextSlice = currSlice;
-
-			 p_Dec->nalu_pos_array_idx++;
     }
 
     copy_slice_info(currSlice, p_Vid->old_slice);
   }
   iRet = current_header;
+
+#if 1
+  static int interval;
+  static int is_decode_one_pbframe = 0;
+
+  if(is_decode_one_pbframe && interval)
+  {
+  	interval --;
+	return iRet;
+  }
+  if(is_decode_one_pbframe && !interval)
+  {
+  	is_decode_one_pbframe = 0;
+	interval = p_Dec->p_Inp->FrameInvl;
+  }
+#endif
   init_picture_decoding(p_Vid);
 
   for(iSliceNo=0; iSliceNo<p_Vid->iSliceNumOfCurrPic; iSliceNo++)
@@ -551,18 +560,16 @@ int decode_one_frame(DecoderParams *pDecoder)
 
     p_Vid->iNumOfSlicesDecoded++;
     p_Vid->num_dec_mb += currSlice->num_dec_mb;
-    //p_Vid->erc_mvperMB += currSlice->erc_mvperMB;
+
+	if(iSliceNo == p_Vid->iSliceNumOfCurrPic - 1)
+	{
+		interval = p_Dec->p_Inp->FrameInvl;
+		is_decode_one_pbframe = 1;
+	}
+
+	p_Dec->nalu_pos_array_idx ++;
   }
 
-#if MVC_EXTENSION_ENABLE
-  //p_Vid->last_dec_view_id = p_Vid->dec_picture->view_id;
-#endif
-  //if(p_Vid->dec_picture->structure == FRAME)
-    //p_Vid->last_dec_poc = p_Vid->dec_picture->frame_poc;
-  //else if(p_Vid->dec_picture->structure == TOP_FIELD)
-    //p_Vid->last_dec_poc = p_Vid->dec_picture->top_poc;
-  //else if(p_Vid->dec_picture->structure == BOTTOM_FIELD)
-    //p_Vid->last_dec_poc = p_Vid->dec_picture->bottom_poc;
   exit_picture(p_Vid, &p_Vid->dec_picture);
   p_Vid->previous_frame_num = ppSliceList[0]->frame_num;
   return (iRet);
@@ -983,17 +990,14 @@ process_nalu:
       }
       break;
     case NALU_TYPE_SEI:
-			p_Dec->nalu_pos_array_idx++;
       //printf ("read_new_slice: Found NALU_TYPE_SEI, len %d\n", nalu->len);
       InterpretSEIMessage(nalu->buf,nalu->len,p_Vid, currSlice);
       break;
     case NALU_TYPE_PPS:
-			p_Dec->nalu_pos_array_idx++;
       //printf ("Found NALU_TYPE_PPS\n");
       ProcessPPS(p_Vid, nalu);
       break;
     case NALU_TYPE_SPS:
-			p_Dec->nalu_pos_array_idx++;
       //printf ("Found NALU_TYPE_SPS\n");
       ProcessSPS(p_Vid, nalu);
       break;
@@ -1028,7 +1032,6 @@ process_nalu:
       //printf ("Found NALU_TYPE_SUB_SPS\n");
       if (p_Inp->DecodeAllLayers== 1)
       {
-				p_Dec->nalu_pos_array_idx++;
         ProcessSubsetSPS(p_Vid, nalu);
       }
       else
@@ -1090,6 +1093,9 @@ void exit_picture(VideoParameters *p_Vid, StorablePicture **dec_picture)
 
   chroma_format_idc = (*dec_picture)->chroma_format_idc;
 
+// add to avoid the memory leak--------
+  free_storable_picture(*dec_picture);
+//-------------------------------------
   *dec_picture=NULL;
 
   if (p_Vid->last_has_mmco_5)

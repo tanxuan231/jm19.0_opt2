@@ -100,7 +100,7 @@ int main(int argc, char **argv)
 	pthread_attr_t attr;
 
 	/*********use multi thread********/
-	if(p_Dec->p_Inp->multi_thread == 1)
+/*	if(p_Dec->p_Inp->multi_thread == 1)
 	{
 		pthread_attr_t attr;
 						
@@ -110,7 +110,7 @@ int main(int argc, char **argv)
 			printf("pthread_attr_destroy error: %s\n",strerror(ret));
 		}
 	}
-
+*/
 	ThreadUnitPar* par = NULL;
 	par = (ThreadUnitPar*)malloc(sizeof(ThreadUnitPar));
 	if(!par)
@@ -119,7 +119,7 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 	memset(par,0,sizeof(ThreadUnitPar));
-	
+#if 0
 	if(p_Dec->p_Inp->multi_thread)  
 	{
 		//deal with the rest KU buffer data
@@ -138,6 +138,7 @@ int main(int argc, char **argv)
 		}
 	}
 	else
+#endif	
 	{		
 		par->buffer_start = 0;
 		par->buffer_len = g_KeyUnitIdx;

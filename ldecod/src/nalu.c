@@ -65,7 +65,12 @@ int read_next_nalu(VideoParameters *p_Vid, NALU_t *nalu)
 		if(p_Dec->p_Inp->enable_key)
 		{
 			nalu_pos += nalu->startcodeprefix_len;
-			p_Dec->nalu_pos_array[nalu_nums_in_bs++] = nalu_pos;
+
+			if(nalu->nal_unit_type == NALU_TYPE_SLICE || nalu->nal_unit_type == NALU_TYPE_IDR)
+			{
+				p_Dec->nalu_pos_array[nalu_nums_in_bs++] = nalu_pos;
+			}
+			
 			nalu_pos += nalu->len;		
 		}
     break;

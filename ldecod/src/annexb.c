@@ -17,7 +17,7 @@
 #include "memalloc.h" 
 #include "fast_memory.h"
 
-static const int IOBUFFERSIZE = 512*1024; //65536;
+static const int IOBUFFERSIZE = 512*1024; //524288;
 
 void malloc_annex_b(VideoParameters *p_Vid, ANNEXB_t **p_annex_b)
 {

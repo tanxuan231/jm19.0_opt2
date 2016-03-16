@@ -31,6 +31,27 @@ static void get_KeyFileName(const char* path, char* filename)
 	filename[j] = '\0';
 }
 
+int get_fileName_prefix(char *FileName)
+{
+	if(FileName == NULL)
+	{
+		return -1;
+	}
+
+	char *p=FileName;
+
+	while(*p!='\0')
+	{
+		if(*p=='.')
+		{
+			*p='\0';
+			return 0;
+		}
+		p++;
+	}
+
+	return -2;
+}
 void open_KeyFile()
 {
 	if(!p_Dec->p_Inp->enable_key)
@@ -42,13 +63,12 @@ void open_KeyFile()
 	get_KeyFileName(p_Dec->p_Inp->infile, filename);
 
 	strncpy(key_file, p_Dec->p_Inp->keyfile_dir, strlen(p_Dec->p_Inp->keyfile_dir));
+	get_fileName_prefix(filename);
 	strncat(key_file, filename, strlen(filename));
-	strcat(key_file, ".key");
-	strcat(key_file, ".txt");
-	printf("key_file: %s\n",key_file);	
+	strcat(key_file, ".ykey");
 
 	//p_Dec->p_KeyFile = fopen(key_file, "w+");
-	p_Dec->KeyFileFd = open(key_file, O_CREAT|O_WRONLY|O_TRUNC, S_IRUSR|S_IRGRP|S_IROTH);
+	p_Dec->KeyFileFd = open(key_file, O_CREAT|O_WRONLY|O_TRUNC, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
 	if(p_Dec->KeyFileFd == -1)
 	{
 		printf("\033[1;31m open key file [%s] error!\033[0m \n",key_file);

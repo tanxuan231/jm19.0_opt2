@@ -277,18 +277,14 @@ void Encrypt(ThreadUnitPar *thread_unit_par)
 {
 	int i=0;
 
-	if(p_Dec->p_Inp->multi_thread == 1)
-	{	
-
-		for(i=thread_unit_par->buffer_start;i<thread_unit_par->buffer_len;i++)
-		{
-			Generate_Key(g_pKeyUnitBuffer[i].byte_offset,thread_unit_par->cur_absolute_offset,
-											g_pKeyUnitBuffer[i].bit_offset,g_pKeyUnitBuffer[i].key_data_len,0);			
-		}
-
-		if(i == thread_unit_par->buffer_len)
-			Generate_Key(0,0,0,0,1);
+	for(i=thread_unit_par->buffer_start;i<thread_unit_par->buffer_len;i++)
+	{
+		Generate_Key(g_pKeyUnitBuffer[i].byte_offset,
+										g_pKeyUnitBuffer[i].bit_offset,g_pKeyUnitBuffer[i].key_data_len,0);			
 	}
+
+	if(i == thread_unit_par->buffer_len)
+		Generate_Key(0,0,0,1);
 }
 
 int Is_Para_Valid(int RelativeByteOff,int BitOffset,int BitLength)
@@ -346,17 +342,15 @@ int Generate_Key(int RelativeByteOff,int BitOffset,int BitLength, int canfree)
 	static int LastByteOffset=0;
 	static int ByteOffset=0;
 	int tmpRelativeByteOff=0;
+
+	int write_ret=0;
 	LastByteOffset=ByteOffset;
 	ByteOffset+=RelativeByteOff;
 	tmpRelativeByteOff=RelativeByteOff;
 	Generate_Key_Get_Changed_ByteNum(BitLength,BitOffset,&ChangedByteNum);
 	
-	
 	if(LastByteOffset==0)
 	{
-		//if(p_Dec->p_Inp->multi_thread == 1)
-			//ByteOffset=cur_absolute_offset;
-		
 		lseek(p_Dec->BitStreamFile,ByteOffset,SEEK_SET);
 		BufferStart=ByteOffset;
 
@@ -365,8 +359,9 @@ int Generate_Key(int RelativeByteOff,int BitOffset,int BitLength, int canfree)
 	
 		read_count=read(p_Dec->BitStreamFile,h264Buffer,MAX_BUFFER_LEN);
 
-		if(0==read_count)
+		if(0==read_count || -1==read_count)
 		{
+			printf("read from h264 error!\n");
 			return -1;
 		}
 
@@ -391,7 +386,12 @@ int Generate_Key(int RelativeByteOff,int BitOffset,int BitLength, int canfree)
 		else
 		{
 			lseek(p_Dec->BitStreamFile,BufferStart,SEEK_SET);
-			write(p_Dec->BitStreamFile,h264Buffer,MAX_BUFFER_LEN);
+			write_ret=write(p_Dec->BitStreamFile,h264Buffer,MAX_BUFFER_LEN);
+			if(write_ret==0 || write_ret ==-1)
+			{
+				printf("write 397 to h264 error!\n");
+			}
+
 			fsync(p_Dec->BitStreamFile);
 			
 			lseek(p_Dec->BitStreamFile,ByteOffset,SEEK_SET);
@@ -416,13 +416,20 @@ int Generate_Key(int RelativeByteOff,int BitOffset,int BitLength, int canfree)
 	if(canfree)
 	{
 		lseek(p_Dec->BitStreamFile,BufferStart,SEEK_SET);
-		write(p_Dec->BitStreamFile,h264Buffer,read_count);
-		//fwrite(keyBuffer,sizeof(char),KeyByteLenSum,p_Dec->p_KeyFile);
-		write(p_Dec->KeyFileFd, KeyByteLenSum, keyBuffer);
-		/*write 0x00 to keyfile as end of file*/
-		//fputc(0x00,p_Dec->p_KeyFile);
-		fsync(p_Dec->KeyFileFd);
-		fsync(p_Dec->BitStreamFile);
+		write_ret=write(p_Dec->BitStreamFile,h264Buffer,read_count);
+		
+		if(write_ret==0 || write_ret ==-1)
+		{
+			printf("write 427 to h264 error!write_ret=%d\n",write_ret);
+		}
+
+		write_ret=write(p_Dec->KeyFileFd, keyBuffer,KeyByteLenSum-KeyByteLen );
+		
+		if(write_ret==0 || write_ret ==-1)
+		{
+			printf("write  435 to keyfile error!,write_ret=%d\n",write_ret);
+		}
+
 		free(key);
 		free(keyBuffer);
 		free(h264Buffer);
@@ -479,11 +486,14 @@ int Generate_Key(int RelativeByteOff,int BitOffset,int BitLength, int canfree)
 	}
 	else
 	{
-		//fwrite(keyBuffer,sizeof(char),KeyByteLenSum-KeyByteLen,p_Dec->p_KeyFile);
-		write(p_Dec->KeyFileFd, KeyByteLenSum-KeyByteLen, keyBuffer);
-		fsync(p_Dec->KeyFileFd);
-		memset(keyBuffer,0x00,MAX_BUFFER_LEN);
+	  write_ret=write(p_Dec->KeyFileFd, keyBuffer,KeyByteLenSum-KeyByteLen );
 
+		if(write_ret==0 || write_ret ==-1)
+		{
+			printf("write to keyfile error!\n");
+		}
+		
+		memset(keyBuffer,0x00,MAX_BUFFER_LEN);
 		memcpy(keyBuffer,key,KeyByteLen);
 		KeyByteLenSum=KeyByteLen;
 	}

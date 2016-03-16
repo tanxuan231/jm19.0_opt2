@@ -924,6 +924,7 @@ int DecodeOneFrame(/*DecodedPicList **ppDecPicList*/)
   DecoderParams *pDecoder = p_Dec;
   ClearDecPicList(pDecoder->p_Vid);
   iRet = decode_one_frame(pDecoder);
+  
   if(iRet == SOP)
   {
     iRet = DEC_SUCCEED;

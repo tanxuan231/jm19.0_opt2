@@ -63,7 +63,7 @@
 //#define MAX_NUM_SLICES 150
 #define MAX_NUM_SLICES     50
 #define MAX_REFERENCE_PICTURES 32               //!< H.264 allows 32 fields
-#define MAX_CODED_FRAME_SIZE 8000000         //!< bytes for one frame
+#define MAX_CODED_FRAME_SIZE 800000         //!< bytes for one frame
 #define MAX_NUM_DECSLICES  16
 #define MAX_DEC_THREADS    16                  //16 core deocoding;
 #define MCBUF_LUMA_PAD_X        32

@@ -8,7 +8,7 @@
 #include "global.h"
 #include "encrypt_key.h"
 /************************************************************************************/
-#define MAX_264BUF_SIZE 1024*1024*120	// 120MB
+#define MAX_264BUF_SIZE 1024*1024*110	// 120MB
 #define MAX_KEYBUF_SIZE 1024*1024*50	// 50MB
 
 char hash_high[9] = 

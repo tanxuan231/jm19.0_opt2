@@ -61,7 +61,7 @@ typedef struct thread_unit_par
 
 
 #define ET_SIZE 300      //!< size of error text buffer
-#define KEY_UNIT_BUFFER_SIZE 1024*1024*30	//3.6G
+#define KEY_UNIT_BUFFER_SIZE 1024*1024*30	//30M
 #define KEY_UNIT_BUFFER_SIZE_APPEND	500
 #define NALU_NUM_IN_BITSTREAM 1024*1024
 

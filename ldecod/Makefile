@@ -36,7 +36,8 @@ ifeq ($(DBG),1)  ### Do not use static compilation for Debug mode
 STC=0
 STATIC=
 else
-STATIC= -static
+#STATIC= -static
+STATIC= 
 endif
 else
 STATIC= 
@@ -54,7 +55,7 @@ ifeq ($(OPENMP),1)
   FLAGS+=-fopenmp
 endif
 
-OPT_FLAG = -O$(OPT)
+OPT_FLAG = -O2
 ifeq ($(DBG),1)
 SUFFIX= .dbg
 FLAGS+= -g
