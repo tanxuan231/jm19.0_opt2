@@ -535,6 +535,7 @@ int decode_one_frame(DecoderParams *pDecoder)
 
   if(is_decode_one_pbframe && interval)
   {
+  	p_Dec->nalu_pos_array_idx += p_Vid->iSliceNumOfCurrPic;
   	interval --;
 	return iRet;
   }
