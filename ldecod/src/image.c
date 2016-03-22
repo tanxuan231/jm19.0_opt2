@@ -53,6 +53,14 @@
 extern int testEndian(void);
 void reorder_lists(Slice *currSlice);
 
+static void free_strage_pic(StorablePicture** dec_picture)
+{
+		free_storable_picture(*dec_picture);
+		*dec_picture = NULL;
+
+		return;
+}
+
 static void setup_buffers(VideoParameters *p_Vid, int layer_id)
 {
   CodingParameters *cps = p_Vid->p_EncodePar[layer_id];
@@ -527,6 +535,7 @@ int decode_one_frame(DecoderParams *pDecoder)
 
     copy_slice_info(currSlice, p_Vid->old_slice);
   }
+	
   iRet = current_header;
 
 #if 1
@@ -537,12 +546,18 @@ int decode_one_frame(DecoderParams *pDecoder)
   {
   	p_Dec->nalu_pos_array_idx += p_Vid->iSliceNumOfCurrPic;
   	interval --;
-	return iRet;
+
+		int i = 0;
+		for(; i < p_Vid->iSliceNumOfCurrPic; ++i)
+		{
+			free_strage_pic(&p_Vid->dec_picture);
+		}
+		return iRet;
   }
   if(is_decode_one_pbframe && !interval)
   {
   	is_decode_one_pbframe = 0;
-	interval = p_Dec->p_Inp->FrameInvl;
+		interval = p_Dec->p_Inp->FrameInvl;
   }
 #endif
   init_picture_decoding(p_Vid);
@@ -993,14 +1008,17 @@ process_nalu:
     case NALU_TYPE_SEI:
       //printf ("read_new_slice: Found NALU_TYPE_SEI, len %d\n", nalu->len);
       InterpretSEIMessage(nalu->buf,nalu->len,p_Vid, currSlice);
+			free_strage_pic(&p_Vid->dec_picture);
       break;
     case NALU_TYPE_PPS:
       //printf ("Found NALU_TYPE_PPS\n");
       ProcessPPS(p_Vid, nalu);
+			free_strage_pic(&p_Vid->dec_picture);
       break;
     case NALU_TYPE_SPS:
       //printf ("Found NALU_TYPE_SPS\n");
       ProcessSPS(p_Vid, nalu);
+			free_strage_pic(&p_Vid->dec_picture);
       break;
     case NALU_TYPE_AUD:
       //printf ("Found NALU_TYPE_AUD\n");
@@ -1040,6 +1058,7 @@ process_nalu:
         if (p_Inp->silent == FALSE)
           printf ("Found Subsequence SPS NALU. Ignoring.\n");
       }
+			free_strage_pic(&p_Vid->dec_picture);			
       break;
     case NALU_TYPE_SLC_EXT:
       //printf ("Found NALU_TYPE_SLC_EXT\n");
