@@ -455,7 +455,7 @@ int decode_one_frame(DecoderParams *pDecoder)
     current_header = SOS;
   }
 	
-  while(current_header != SOP && current_header != EOS)
+  while(current_header != SOP && current_header != EOS)	// SOS才会循环
   {
     //no pending slices;
     assert(p_Vid->iSliceNumOfCurrPic < p_Vid->iNumOfSlicesAllocated);
@@ -515,7 +515,7 @@ int decode_one_frame(DecoderParams *pDecoder)
          }
          p_Vid->iNumOfSlicesAllocated += MAX_NUM_DECSLICES;
        }
-       current_header = SOS;       
+       current_header = SOS;	// 会执行while循环       
     }
     else
     {
@@ -1006,19 +1006,16 @@ process_nalu:
       }
       break;
     case NALU_TYPE_SEI:
-      //printf ("read_new_slice: Found NALU_TYPE_SEI, len %d\n", nalu->len);
+      //printf ("Found NALU_TYPE_SEI, len %d\n", nalu->len);
       InterpretSEIMessage(nalu->buf,nalu->len,p_Vid, currSlice);
-			free_strage_pic(&p_Vid->dec_picture);
       break;
     case NALU_TYPE_PPS:
-      //printf ("Found NALU_TYPE_PPS\n");
+      //printf ("Found NALU_TYPE_PPS, len %d\n", nalu->len);
       ProcessPPS(p_Vid, nalu);
-			free_strage_pic(&p_Vid->dec_picture);
       break;
     case NALU_TYPE_SPS:
-      //printf ("Found NALU_TYPE_SPS\n");
+      //printf ("Found NALU_TYPE_SPS, len %d\n", nalu->len);
       ProcessSPS(p_Vid, nalu);
-			free_strage_pic(&p_Vid->dec_picture);
       break;
     case NALU_TYPE_AUD:
       //printf ("Found NALU_TYPE_AUD\n");
@@ -1048,7 +1045,7 @@ process_nalu:
         prefix_nal_unit_svc();
       break;
     case NALU_TYPE_SUB_SPS:
-      //printf ("Found NALU_TYPE_SUB_SPS\n");
+      //printf ("Found NALU_TYPE_SUB_SPS, len %d\n", nalu->len);
       if (p_Inp->DecodeAllLayers== 1)
       {
         ProcessSubsetSPS(p_Vid, nalu);
@@ -1057,8 +1054,7 @@ process_nalu:
       {
         if (p_Inp->silent == FALSE)
           printf ("Found Subsequence SPS NALU. Ignoring.\n");
-      }
-			free_strage_pic(&p_Vid->dec_picture);			
+      }	
       break;
     case NALU_TYPE_SLC_EXT:
       //printf ("Found NALU_TYPE_SLC_EXT\n");
@@ -1094,7 +1090,7 @@ void exit_picture(VideoParameters *p_Vid, StorablePicture **dec_picture)
   char   yuvFormat[10];
 
   // return if the last picture has already been finished
-  if (*dec_picture==NULL || (p_Vid->num_dec_mb != p_Vid->PicSizeInMbs && (p_Vid->yuv_format != YUV444 || !p_Vid->separate_colour_plane_flag)))
+  if (*dec_picture==NULL /*|| (p_Vid->num_dec_mb != p_Vid->PicSizeInMbs && (p_Vid->yuv_format != YUV444 || !p_Vid->separate_colour_plane_flag))*/)
   {
     return;
   }
